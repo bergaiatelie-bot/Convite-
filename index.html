@@ -1,0 +1,474 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Convite Encantado</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: #fce7f1;
+      font-family: Arial, sans-serif;
+    }
+
+    #scene {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      background: #fce7f1;
+    }
+
+    #princess {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    #frog {
+      position: absolute;
+      width: clamp(100px, 27vw, 165px);
+      height: auto;
+      left: 4%;
+      bottom: 12%;
+      top: auto;
+      z-index: 5;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    #frog:active {
+      cursor: grabbing;
+    }
+
+    #glow {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(255, 230, 120, 0.9);
+      box-shadow: 0 0 35px 20px rgba(255, 190, 235, 0.8);
+      transform: translate(-50%, -50%) scale(0);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    #glow.active {
+      animation: magicGlow 1.5s ease-out forwards;
+    }
+
+    @keyframes magicGlow {
+      0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+      }
+      35% {
+        transform: translate(-50%, -50%) scale(8);
+        opacity: 0.85;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(14);
+        opacity: 0;
+      }
+    }
+
+    .heart {
+      position: fixed;
+      z-index: 11;
+      pointer-events: none;
+      font-size: 26px;
+      animation: floatHeart 2.4s ease-out forwards;
+    }
+
+    @keyframes floatHeart {
+      0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.4) rotate(-15deg);
+      }
+      20% {
+        opacity: 1;
+        transform: translateY(-20px) scale(1.2) rotate(10deg);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-170px) scale(0.8) rotate(25deg);
+      }
+    }
+
+    .sparkle {
+      position: fixed;
+      z-index: 12;
+      pointer-events: none;
+      color: #fff8b8;
+      text-shadow:
+        0 0 5px #fff,
+        0 0 12px #ffb6e6,
+        0 0 22px #ffd1f0;
+      animation: sparkleEffect 1.8s ease-out forwards;
+    }
+
+    @keyframes sparkleEffect {
+      0% {
+        opacity: 0;
+        transform: scale(0) rotate(0deg);
+      }
+      35% {
+        opacity: 1;
+        transform: scale(1.4) rotate(90deg);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.2) rotate(180deg);
+      }
+    }
+
+    #videoScreen {
+      display: none;
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #inviteVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    #restart {
+      display: none;
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      border: none;
+      border-radius: 24px;
+      padding: 12px 20px;
+      background: #e7549b;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <main id="scene">
+    <img id="princess" src="princesa.png" alt="Princesa">
+    <img id="frog" src="sapo.png" alt="Sapinho">
+    <div id="glow"></div>
+  </main>
+
+  <section id="videoScreen">
+    <video id="inviteVideo" controls playsinline>
+      <source src="convite.mp4" type="video/mp4">
+      Seu navegador não conseguiu reproduzir o vídeo.
+    </video>
+  </section>
+
+  <button id="restart" type="button">Recomeçar</button>
+
+  <script>
+    const scene = document.getElementById("scene");
+    const princess = document.getElementById("princess");
+    const frog = document.getElementById("frog");
+    const glow = document.getElementById("glow");
+    const videoScreen = document.getElementById("videoScreen");
+    const inviteVideo = document.getElementById("inviteVideo");
+    const restart = document.getElementById("restart");
+
+    let dragging = false;
+    let completed = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    /*
+      PONTOS DAS BOCAS NAS IMAGENS ORIGINAIS.
+
+      Princesa: imagem de 941 x 1671.
+      Sapinho: imagem de 1223 x 1286.
+
+      Coordenadas aproximadas; podem precisar de
+      um pequeno ajuste conforme o desenho.
+    */
+    const PRINCESS_MOUTH_X = 0.465;
+    const PRINCESS_MOUTH_Y = 0.497;
+
+    const FROG_MOUTH_X = 0.84;
+    const FROG_MOUTH_Y = 0.35;
+
+    // Calcula a área real da imagem dentro do object-fit: contain.
+    function getImageContentRect(img) {
+      const rect = img.getBoundingClientRect();
+
+      const naturalWidth = img.naturalWidth;
+      const naturalHeight = img.naturalHeight;
+
+      if (!naturalWidth || !naturalHeight) {
+        return rect;
+      }
+
+      const scale = Math.min(
+        rect.width / naturalWidth,
+        rect.height / naturalHeight
+      );
+
+      const width = naturalWidth * scale;
+      const height = naturalHeight * scale;
+
+      return {
+        left: rect.left + (rect.width - width) / 2,
+        top: rect.top + (rect.height - height) / 2,
+        width,
+        height
+      };
+    }
+
+    // Calcula a posição real dos lábios na tela.
+    function getPrincessMouth() {
+      const rect = getImageContentRect(princess);
+
+      return {
+        x: rect.left + rect.width * PRINCESS_MOUTH_X,
+        y: rect.top + rect.height * PRINCESS_MOUTH_Y
+      };
+    }
+
+    // Calcula a posição da boca do sapinho na tela.
+    function getFrogMouth() {
+      const rect = frog.getBoundingClientRect();
+
+      return {
+        x: rect.left + rect.width * FROG_MOUTH_X,
+        y: rect.top + rect.height * FROG_MOUTH_Y
+      };
+    }
+
+    // Verifica se a boca do sapinho chegou perto dos lábios.
+    function isKissing() {
+      const princessMouth = getPrincessMouth();
+      const frogMouth = getFrogMouth();
+
+      const distanceX = Math.abs(
+        frogMouth.x - princessMouth.x
+      );
+
+      const distanceY = Math.abs(
+        frogMouth.y - princessMouth.y
+      );
+
+      return distanceX < 45 && distanceY < 45;
+    }
+
+    // Alinha exatamente os pontos das duas bocas.
+    function alignFrogMouth() {
+      const princessMouth = getPrincessMouth();
+      const rect = frog.getBoundingClientRect();
+
+      const newLeft =
+        princessMouth.x - rect.width * FROG_MOUTH_X;
+
+      const newTop =
+        princessMouth.y - rect.height * FROG_MOUTH_Y;
+
+      frog.style.left = newLeft + "px";
+      frog.style.top = newTop + "px";
+      frog.style.bottom = "auto";
+    }
+
+    function createHearts() {
+      const rect = frog.getBoundingClientRect();
+
+      for (let i = 0; i < 12; i++) {
+        const heart = document.createElement("div");
+        heart.className = "heart";
+        heart.textContent = ["💗", "💕", "💖", "💘"][i % 4];
+
+        heart.style.left =
+          (rect.left + rect.width / 2 +
+          Math.random() * 120 - 60) + "px";
+
+        heart.style.top =
+          (rect.top + rect.height / 2 +
+          Math.random() * 60 - 30) + "px";
+
+        heart.style.animationDelay =
+          Math.random() * 0.6 + "s";
+
+        document.body.appendChild(heart);
+
+        setTimeout(() => heart.remove(), 3200);
+      }
+
+      for (let i = 0; i < 24; i++) {
+        const sparkle = document.createElement("div");
+        sparkle.className = "sparkle";
+        sparkle.textContent = ["✦", "✧", "✨", "✧"][i % 4];
+
+        sparkle.style.fontSize =
+          (14 + Math.random() * 22) + "px";
+
+        sparkle.style.left =
+          (rect.left + rect.width / 2 +
+          Math.random() * 180 - 90) + "px";
+
+        sparkle.style.top =
+          (rect.top + rect.height / 2 +
+          Math.random() * 140 - 70) + "px";
+
+        sparkle.style.animationDelay =
+          Math.random() * 0.8 + "s";
+
+        document.body.appendChild(sparkle);
+
+        setTimeout(() => sparkle.remove(), 3000);
+      }
+    }
+
+    function completeKiss() {
+      if (completed) return;
+
+      completed = true;
+      dragging = false;
+
+      // Encosta a boca do sapinho nos lábios da princesa.
+      alignFrogMouth();
+
+      const mouth = getPrincessMouth();
+      const sceneRect = scene.getBoundingClientRect();
+
+      glow.style.left = (mouth.x - sceneRect.left) + "px";
+      glow.style.top = (mouth.y - sceneRect.top) + "px";
+
+      glow.classList.remove("active");
+      void glow.offsetWidth;
+      glow.classList.add("active");
+
+      createHearts();
+
+      setTimeout(revealVideo, 2600);
+    }
+
+    function revealVideo() {
+      scene.style.display = "none";
+      videoScreen.style.display = "flex";
+      restart.style.display = "block";
+
+      inviteVideo.currentTime = 0;
+
+      const playPromise = inviteVideo.play();
+
+      if (playPromise && playPromise.catch) {
+        playPromise.catch(() => {});
+      }
+    }
+
+    frog.addEventListener("pointerdown", (event) => {
+      if (completed) return;
+
+      dragging = true;
+      frog.setPointerCapture(event.pointerId);
+
+      const rect = frog.getBoundingClientRect();
+
+      offsetX = event.clientX - rect.left;
+      offsetY = event.clientY - rect.top;
+
+      frog.style.left = rect.left + "px";
+      frog.style.top = rect.top + "px";
+      frog.style.bottom = "auto";
+
+      event.preventDefault();
+    });
+
+    frog.addEventListener("pointermove", (event) => {
+      if (!dragging || completed) return;
+
+      const sceneRect = scene.getBoundingClientRect();
+
+      const frogWidth = frog.offsetWidth;
+      const frogHeight = frog.offsetHeight;
+
+      let x = event.clientX - offsetX;
+      let y = event.clientY - offsetY;
+
+      x = Math.max(
+        0,
+        Math.min(x, sceneRect.width - frogWidth)
+      );
+
+      y = Math.max(
+        0,
+        Math.min(y, sceneRect.height - frogHeight)
+      );
+
+      frog.style.left = x + "px";
+      frog.style.top = y + "px";
+      frog.style.bottom = "auto";
+    });
+
+    frog.addEventListener("pointerup", () => {
+      if (!dragging || completed) return;
+
+      dragging = false;
+
+      if (isKissing()) {
+        completeKiss();
+      }
+    });
+
+    frog.addEventListener("pointercancel", () => {
+      dragging = false;
+    });
+
+    restart.addEventListener("click", () => {
+      inviteVideo.pause();
+      inviteVideo.currentTime = 0;
+
+      videoScreen.style.display = "none";
+      scene.style.display = "block";
+      restart.style.display = "none";
+
+      completed = false;
+      dragging = false;
+
+      glow.classList.remove("active");
+
+      frog.style.left = "4%";
+      frog.style.bottom = "12%";
+      frog.style.top = "auto";
+      frog.style.transform = "translate(0, 0)";
+    });
+  </script>
+
+</body>
+</html>
